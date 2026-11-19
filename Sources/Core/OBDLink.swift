@@ -70,6 +70,9 @@ final class OBDLink: NSObject, ObservableObject {
             var r = ScanReport()
             r.vin = "1FT7W2BT4KEE14369"; r.batteryV = 14.5; r.coolantC = 61; r.oilC = 60; r.railKPa = 26820; r.fuelPercent = 46.6
             r.tires = readings.tires
+            r.tireSource = "من السيارة"
+            r.fuelType = "ديزل Diesel"
+            r.modules = FordModuleSpec.all.map { ModuleResult(key: $0.key, responded: $0.key != "ipc", readable: $0.key != "ipc") }
             store.addScan(r)
         }
         if store.data.oil.lastChangeOdometerKm == nil {
@@ -240,6 +243,18 @@ final class OBDLink: NSObject, ObservableObject {
         step("ضغط الكفرات")
         await readTires(into: &report)
 
+        step("كمبيوترات فورد")
+        await readModules(into: &report)
+
+        step("العداد وساعات المحرك")
+        await readOdometer(into: &report)
+        report.fuelType = ProbeLogic.fuelType(fromReply: await send("0151"))
+
+        if !(report.storedDTCs + report.pendingDTCs).isEmpty {
+            step("لحظة تسجيل العطل")
+            report.freezeFrame = await readFreezeFrame()
+        }
+
         report.batteryV = readings.batteryV
         report.coolantC = readings.coolantC
         report.oilC = readings.oilC
@@ -248,6 +263,53 @@ final class OBDLink: NSObject, ObservableObject {
         store.addScan(report)
         alerts.scanFinished(report, store: store)
         add("SCAN done dtc=\(report.allDTCs.count)")
+    }
+
+    /// Reads stored/active trouble codes from each Ford module (read-only UDS 0x19), then restores normal addressing.
+    private func readModules(into report: inout ScanReport) async {
+        var results: [ModuleResult] = []
+        for m in FordModuleSpec.all {
+            let hdr = await send("ATSH" + m.header, timeout: 1.2)
+            guard hdr.uppercased().contains("OK") else {
+                results.append(ModuleResult(key: m.key, responded: false, readable: false))
+                continue
+            }
+            let parsed = UDS.parseDTCReply(await send(UDS.readDTCRequest, timeout: 2.5))
+            results.append(ModuleResult(key: m.key, responded: parsed.responded, readable: parsed.readable, dtcs: parsed.codes))
+            add("MODULE \(m.key) responded=\(parsed.responded) codes=\(parsed.codes.joined(separator: ","))")
+        }
+        _ = await send("ATSH7DF", timeout: 1.2)
+        report.modules = results
+    }
+
+    /// Real odometer from the PCM and total engine/idle hours from PID 7F.
+    private func readOdometer(into report: inout ScanReport) async {
+        if (await send("ATSH7E0", timeout: 1.2)).uppercased().contains("OK") {
+            let odo = UDS.fordOdometerKm(await send("22DD01", timeout: 2))
+            _ = await send("ATSH7DF", timeout: 1.2)
+            if let odo, odo > 1000 {
+                report.fordOdometerKm = odo
+                let current = store.data.oil.odometerKm
+                if odo > current * 0.5 && odo < current * 2 {
+                    store.data.oil.odometerKm = odo
+                } else {
+                    report.notes.append("العداد من كمبيوتر فورد \(Int(odo)) كم يختلف كثير عن المسجل — ما تم اعتماده")
+                }
+            }
+        }
+        if let h = UDS.engineHours(await send("017F", timeout: 2)) {
+            report.engineHours = h.total
+            report.idleHours = h.idle
+        }
+    }
+
+    private func readFreezeFrame() async -> FreezeFrame? {
+        var ff = FreezeFrame()
+        if let d = UDS.freezeFrame(0x02, in: await send("020200")), d.count >= 2, (d[0] | d[1]) != 0 { ff.dtc = UDS.dtcString(hi: d[0], lo: d[1]) }
+        if let d = UDS.freezeFrame(0x0C, in: await send("020C00")), d.count >= 2 { ff.rpm = Double(Int(d[0]) * 256 + Int(d[1])) / 4 }
+        if let d = UDS.freezeFrame(0x0D, in: await send("020D00")) { ff.speedKmh = Double(d[0]) }
+        if let d = UDS.freezeFrame(0x05, in: await send("020500")) { ff.coolantC = Double(d[0]) - 40 }
+        return ff == FreezeFrame() ? nil : ff
     }
 
     /// Asks the body module directly (read-only service 0x22), then puts the adapter back to normal addressing.

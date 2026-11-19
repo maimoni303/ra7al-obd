@@ -30,7 +30,7 @@ struct HomeView: View {
             .padding(.bottom, 8)
         }
         .scrollIndicators(.hidden)
-        .sheet(isPresented: $showScan) { ScanReportView(p: p).environment(\.layoutDirection, .rightToLeft) }
+        .navigationDestination(isPresented: $showScan) { ScanResultsView(p: p) }
     }
 
     private var gaugeGrid: some View {
@@ -121,13 +121,13 @@ struct HomeView: View {
 
     private func heroTitle(_ s: ScanReport?) -> String {
         guard let s else { return "ما تم فحص بعد" }
-        return s.healthy ? "المحرك سليم" : "يوجد \(s.allDTCs.count) كود عطل"
+        return ScanVerdict.evaluate(s, data: store.data).headline
     }
 
     private func heroSub(_ s: ScanReport?) -> String {
         guard let s else { return "شغّل السيارة واضغط فحص شامل" }
         let f = DateFormatter(); f.locale = Locale(identifier: "ar"); f.dateFormat = "EEEE h:mm a"
-        return (s.healthy ? "لا أكواد أعطال · " : "") + "فحص " + f.string(from: s.date)
+        return (s.allDTCs.isEmpty ? "لا أكواد أعطال · " : "\(s.allDTCs.count) كود · ") + "فحص " + f.string(from: s.date)
     }
 
     private func alertBanner(_ a: ActiveAlert) -> some View {
@@ -164,77 +164,5 @@ struct HomeView: View {
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(c.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
-    }
-}
-
-struct ScanReportView: View {
-    let p: Palette
-    @ObservedObject var store = VehicleStore.shared
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                if let s = store.lastScan {
-                    Section("آخر فحص") {
-                        row("التاريخ", arDate(s.date))
-                        row("لمبة فحص المحرك", s.milOn ? "مضاءة" : "مطفأة")
-                        row("رقم الهيكل", s.vin ?? store.data.vin ?? "—")
-                        row("البطارية", fmt(s.batteryV, "%.1f V"))
-                        row("حرارة الماء", fmt(s.coolantC, "%.0f°C"))
-                        row("حرارة الزيت", fmt(s.oilC, "%.0f°C"))
-                        row("ضغط سكة الديزل", s.railKPa.map { "\(Int($0 / 100)) بار" } ?? "—")
-                    }
-                    Section("أكواد الأعطال") {
-                        if s.allDTCs.isEmpty { Text("لا يوجد — المحرك والقير سليمين").foregroundStyle(.green) }
-                        ForEach(s.allDTCs, id: \.self) { c in
-                            VStack(alignment: .leading) {
-                                Text(c).font(.headline)
-                                Text(DTCText.describe(c)).font(.footnote).foregroundStyle(.secondary)
-                                Text(kind(c, s)).font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    if !s.notes.isEmpty {
-                        Section("ملاحظات") { ForEach(s.notes, id: \.self) { Text($0) } }
-                    }
-                    Section {
-                        ShareLink(item: text(s)) { Label("مشاركة التقرير", systemImage: "square.and.arrow.up") }
-                    }
-                } else {
-                    Text("ما فيه فحص محفوظ بعد.")
-                }
-                if store.data.scans.count > 1 {
-                    Section("الفحوصات السابقة") {
-                        ForEach(store.data.scans.dropFirst()) { s in
-                            row(arDate(s.date), s.healthy ? "سليم" : "\(s.allDTCs.count) كود")
-                        }
-                    }
-                }
-            }
-            .navigationTitle("تقرير الفحص")
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("تم") { dismiss() } } }
-        }
-        .preferredColorScheme(p.scheme)
-    }
-
-    private func row(_ a: String, _ b: String) -> some View {
-        HStack { Text(a); Spacer(); Text(b).foregroundStyle(.secondary) }
-    }
-
-    private func kind(_ c: String, _ s: ScanReport) -> String {
-        var k: [String] = []
-        if s.storedDTCs.contains(c) { k.append("مخزن") }
-        if s.pendingDTCs.contains(c) { k.append("معلق") }
-        if s.permanentDTCs.contains(c) { k.append("دائم") }
-        return k.joined(separator: " · ")
-    }
-
-    private func text(_ s: ScanReport) -> String {
-        var t = "تقرير RA7AL OBD — \(arDate(s.date))\n"
-        t += "VIN: \(s.vin ?? "-")\nلمبة المحرك: \(s.milOn ? "مضاءة" : "مطفأة")\n"
-        t += "الأكواد: " + (s.allDTCs.isEmpty ? "لا يوجد" : s.allDTCs.map { "\($0) \(DTCText.describe($0))" }.joined(separator: "\n")) + "\n"
-        t += "البطارية: \(fmt(s.batteryV, "%.1f")) V · الماء: \(fmt(s.coolantC))°C · الزيت: \(fmt(s.oilC))°C\n"
-        return t
     }
 }

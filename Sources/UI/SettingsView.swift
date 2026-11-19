@@ -28,6 +28,9 @@ struct SettingsView: View {
             }
 
             Section("السيارة") {
+                NavigationLink { VehicleInfoView(p: p) } label: { Label("بيانات السيارة", systemImage: "car.fill") }
+                    .accessibilityIdentifier("settings-vehicle")
+                NavigationLink { DTCLibraryView(p: p) } label: { Label("دليل أكواد الأعطال", systemImage: "book.fill") }
                 stepper("سعة التانكي", $store.data.fuel.tankLiters, 60...250, "لتر")
                 HStack {
                     Text("العداد الحالي")

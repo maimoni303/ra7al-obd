@@ -87,13 +87,18 @@ final class AlertCenter: ObservableObject {
     }
 
     func scanFinished(_ r: ScanReport, store: VehicleStore) {
+        let v = ScanVerdict.evaluate(r, data: store.data)
         let body: String
-        if r.healthy {
-            body = "السيارة سليمة. لا توجد أكواد أعطال."
+        if r.allDTCs.isEmpty {
+            body = v.headline + ". لا توجد أكواد أعطال."
         } else {
-            body = "وجدنا \(r.allDTCs.count) كود: " + r.allDTCs.joined(separator: "، ")
+            body = v.headline + " — " + r.allDTCs.map { "\($0) \(DTCKnowledge.info($0).title)" }.joined(separator: "، ")
         }
-        notify(title: "نتيجة الفحص التلقائي", body: body, id: "scan")
+        notify(title: "نتيجة الفحص الشامل", body: body, id: "scan")
+        guard v.drive == .stop, !OBDLink.isUITesting else { return }
+        let a = ActiveAlert(kind: .dtc, level: .danger, title: "أوقف السيارة", message: v.reason ?? "")
+        onDanger?(a)
+        if store.data.speakAlerts { say(a.title + ". " + a.message) }
     }
 
     func refuelDetected(_ r: FuelModel.Refuel) {

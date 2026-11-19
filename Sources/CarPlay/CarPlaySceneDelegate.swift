@@ -111,7 +111,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         specs.append(Spec(icon: .rail, value: railValue, title: "سكة الديزل بار", fraction: frac(r.railKPa, 0, 180_000), level: nil, action: {}))
         var scanValue = "ابدأ"
         var scanLevel: AlertLevel?
-        if link.scanning { scanValue = "…" } else if let scan { scanValue = scan.healthy ? "سليم" : "\(scan.allDTCs.count) كود"; scanLevel = scan.healthy ? .ok : .warn }
+        if link.scanning { scanValue = "…" } else if let scan {
+            let v = ScanVerdict.evaluate(scan, data: store.data)
+            scanValue = v.short
+            scanLevel = v.drive.level
+        }
         specs.append(Spec(icon: .scan, value: scanValue, title: "فحص شامل", fraction: 1, level: scanLevel, action: { [weak self] in self?.link.requestScan() }))
         specs.append(Spec(icon: .station, value: "ديزل", title: "أقرب محطة", fraction: 1, level: nil, action: { [weak self] in self?.openNearestStation() }))
         return specs.map { s in
@@ -139,9 +143,20 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         run.handler = { [weak self] _, done in self?.link.requestScan(); done() }
         head.append(run)
         guard let s = store.lastScan else { return [CPListSection(items: head)] }
+        let v = ScanVerdict.evaluate(s, data: store.data)
+        let verdict = CPListItem(text: v.headline,
+                                 detailText: "القيادة: \(v.drive.title) · الاستعجال: \(v.urgency.title)" + (v.reason.map { " · " + $0 } ?? ""),
+                                 image: UIImage(systemName: v.symbol)?.withTintColor(v.drive == .safe ? .systemGreen : (v.drive == .caution ? .systemYellow : .systemRed),
+                                                                                      renderingMode: .alwaysOriginal))
+        head.insert(verdict, at: 0)
         var rows: [CPListItem] = []
-        rows.append(CPListItem(text: "أكواد الأعطال", detailText: s.allDTCs.isEmpty ? "لا يوجد" : s.allDTCs.joined(separator: "، ")))
-        for c in s.allDTCs.prefix(6) { rows.append(CPListItem(text: c, detailText: DTCText.describe(c))) }
+        for sec in v.sections where sec.status != .unavailable {
+            rows.append(CPListItem(text: sec.title, detailText: sec.badge + (sec.codes.isEmpty ? "" : " — " + sec.codes.joined(separator: "، "))))
+        }
+        for c in s.allDTCs.prefix(6) {
+            let i = DTCKnowledge.info(c)
+            rows.append(CPListItem(text: c + " · " + i.title, detailText: "القيادة: \(i.drive.title) — " + i.action))
+        }
         rows.append(CPListItem(text: "لمبة فحص المحرك", detailText: s.milOn ? "مضاءة" : "مطفأة"))
         rows.append(CPListItem(text: "البطارية", detailText: fmt(s.batteryV, "%.1f V")))
         if let k = store.data.oil.kmLeft() { rows.append(CPListItem(text: "عمر الزيت", detailText: "باقي ~\(Int(k)) كم")) }

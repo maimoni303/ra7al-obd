@@ -218,8 +218,16 @@ struct ScanReport: Codable, Equatable, Identifiable {
     var tires = TireSet()
     var tireSource: String?
     var notes: [String] = []
+    // Added in 1.0.2 — optional so scans saved by older versions still load.
+    var modules: [ModuleResult]?
+    var fordOdometerKm: Double?
+    var engineHours: Double?
+    var idleHours: Double?
+    var fuelType: String?
+    var freezeFrame: FreezeFrame?
 
-    var allDTCs: [String] { Array(Set(storedDTCs + pendingDTCs + permanentDTCs)).sorted() }
+    var moduleDTCs: [String] { (modules ?? []).flatMap(\.dtcs) }
+    var allDTCs: [String] { Array(Set(storedDTCs + pendingDTCs + permanentDTCs + moduleDTCs)).sorted() }
     var healthy: Bool { allDTCs.isEmpty && !milOn }
 
     /// 0…100 score shown on the home ring.
@@ -259,7 +267,7 @@ enum DTCText {
         "U0100": "انقطاع الاتصال بكمبيوتر المحرك",
         "U0101": "انقطاع الاتصال بكمبيوتر القير",
     ]
-    static func describe(_ code: String) -> String { known[code] ?? "كود عطل — ابحث عنه أو اعرضه على الوكالة" }
+    static func describe(_ code: String) -> String { known[code] ?? DTCKnowledge.info(code).title }
 }
 
 // MARK: - VIN

@@ -54,8 +54,28 @@ final class ScreensUITests: XCTestCase {
         tap("tab-home")
         tap("theme-dark")
         tap("health")
-        XCTAssertTrue(app.navigationBars["تقرير الفحص"].waitForExistence(timeout: 5))
-        shot("13-scan-report")
-        app.buttons["تم"].tap()
+        XCTAssertTrue(app.navigationBars["نتيجة الفحص الشامل"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["تقدر تسوق بأمان"].waitForExistence(timeout: 5))
+        shot("13-scan-results")
+        app.swipeUp();          shot("14-scan-results-more")
+
+        tap("vehicle-info")
+        XCTAssertTrue(app.staticTexts["Ford F-250 Super Duty 2019"].waitForExistence(timeout: 5))
+        shot("15-vehicle-info")
+        tap("back")
+
+        tap("dtc-library")
+        XCTAssertTrue(app.navigationBars["دليل أكواد الأعطال"].waitForExistence(timeout: 5))
+        shot("16-dtc-library")
+        XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 5))
+        let row = app.staticTexts["حساس سرعة الكفر الأمامي اليسار"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        XCTAssertTrue(app.navigationBars["شرح الكود"].waitForExistence(timeout: 5))
+        shot("17-dtc-detail")
+        tap("back")
+        tap("back")
+        tap("back")
+        XCTAssertTrue(app.buttons["tab-home"].waitForExistence(timeout: 5))
     }
 }

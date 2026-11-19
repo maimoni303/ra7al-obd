@@ -7,6 +7,9 @@ Free iPhone + CarPlay app for the ZUS/NONDA "OBDBLE" Bluetooth adapter, tuned fo
 - Diesel range learned from real consumption; refuel detection
 - Oil life from distance, engine hours and idle hours
 - Automatic full scan when the truck starts (stored, pending and permanent DTCs, VIN with check-digit, tyres)
+- Scan results by system (engine, transmission, ABS, airbag, body, tyres, battery, maintenance, cluster) with an Arabic verdict: can I drive, urgency, confidence
+- Ford module trouble codes over read-only UDS 0x19; odometer (PCM DID DD01) and engine/idle hours (PID 7F) read automatically
+- Offline Arabic code guide (meaning, likely causes, what to do) with freeze-frame data
 - Nearest diesel station with Google Maps hand-off (also on CarPlay)
 - AZDOME PG17 dash-cam: live view and clips over its Wi-Fi (phone only)
 - Three themes: night, day, youth
