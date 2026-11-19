@@ -16,7 +16,10 @@ jobs:
           set -o pipefail
           xcodebuild test -project RA7ALOBD.xcodeproj -scheme RA7ALOBD \
             -destination 'platform=iOS Simulator,name=iPhone 16 Pro Max' -resultBundlePath TestResults.xcresult \
-            CODE_SIGNING_ALLOWED=NO | xcbeautify
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log | xcbeautify
+      - name: Show compiler errors
+        if: failure()
+        run: grep -E "error:|Test Case .* failed|XCTAssert" test.log | sort -u | head -60 || true
       - name: Export screenshots
         if: always()
         run: |

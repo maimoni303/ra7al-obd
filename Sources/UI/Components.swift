@@ -131,15 +131,19 @@ struct TireDiagram: View {
         .accessibilityElement(children: .combine)
     }
 
+    private func wheelColor(_ i: Int) -> Color {
+        let all: [Double?] = [tires.frontLeft, tires.frontRight, tires.rearLeft, tires.rearRight]
+        guard let v = all[i] else { return p.sub }
+        return p.color(limits.tireLevel(psi: v, front: i < 2))
+    }
+
     private var truck: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 16).fill(p.track).frame(width: 44, height: 154)
             RoundedRectangle(cornerRadius: 6).fill(p.bg).frame(width: 32, height: 26).offset(y: -46)
             RoundedRectangle(cornerRadius: 4).fill(p.bg.opacity(0.6)).frame(width: 32, height: 60).offset(y: 29)
             ForEach(0..<4, id: \.self) { i in
-                let v: Double? = [tires.frontLeft, tires.frontRight, tires.rearLeft, tires.rearRight][i]
-                let c = v == nil ? p.sub : p.color(limits.tireLevel(psi: v, front: i < 2))
-                RoundedRectangle(cornerRadius: 4).fill(c)
+                RoundedRectangle(cornerRadius: 4).fill(wheelColor(i))
                     .frame(width: 10, height: 26)
                     .offset(x: i % 2 == 0 ? -27 : 27, y: i < 2 ? -50 : 46)
             }

@@ -16,21 +16,7 @@ struct HomeView: View {
             VStack(spacing: 12) {
                 hero
                 ForEach(alerts.active) { a in alertBanner(a) }
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                    IconGauge(p: p, icon: .coolant, value: r.coolantC.map { "\(Int($0))°C" } ?? "—", caption: "حرارة الماء",
-                              fraction: frac(r.coolantC, 40, limits.coolantDanger), color: p.color(limits.coolantLevel(r.coolantC)))
-                    IconGauge(p: p, icon: .oil, value: r.oilC.map { "\(Int($0))°C" } ?? "—", caption: "حرارة الزيت",
-                              fraction: frac(r.oilC, 40, limits.oilDanger), color: p.color(limits.oilLevel(r.oilC)))
-                    IconGauge(p: p, icon: .fuel, value: range.map { "\(Int($0)) كم" } ?? "—",
-                              caption: r.fuelLevelPercent.map { String(format: "الديزل %.0f%%", $0) } ?? "الديزل",
-                              fraction: (r.fuelLevelPercent ?? 0) / 100, color: fuelColor)
-                    IconGauge(p: p, icon: .battery, value: fmt(r.batteryV, "%.1f V"), caption: r.engineRunning ? "الدينمو يشحن" : "البطارية",
-                              fraction: frac(r.batteryV, 11, 15), color: p.color(limits.voltageLevel(r.batteryV, engineRunning: r.engineRunning)))
-                    IconGauge(p: p, icon: .rail, value: r.railKPa.map { "\(Int($0 / 100)) بار" } ?? "—", caption: "ضغط سكة الديزل",
-                              fraction: frac(r.railKPa, 0, 180_000), color: p.accent)
-                    IconGauge(p: p, icon: .tires, value: minTire.map { "\(Int($0)) psi" } ?? "—", caption: "أقل كفر",
-                              fraction: (minTire ?? 0) / max(1, limits.tireRearPsi), color: tireColor)
-                }
+                gaugeGrid
                 if link.scanning {
                     HStack { ProgressView(); Text("جاري الفحص: \(link.scanProgress)").foregroundStyle(p.sub) }
                         .frame(maxWidth: .infinity, minHeight: 54).card(p)
@@ -47,16 +33,57 @@ struct HomeView: View {
         .sheet(isPresented: $showScan) { ScanReportView(p: p) }
     }
 
+    private var gaugeGrid: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            coolantGauge; oilGauge; fuelGauge; batteryGauge; railGauge; tireGauge
+        }
+    }
+
+    private var coolantGauge: some View {
+        let v: String = r.coolantC.map { "\(Int($0))°C" } ?? "—"
+        return IconGauge(p: p, icon: .coolant, value: v, caption: "حرارة الماء",
+                         fraction: frac(r.coolantC, 40, limits.coolantDanger), color: p.color(limits.coolantLevel(r.coolantC)))
+    }
+    private var oilGauge: some View {
+        let v: String = r.oilC.map { "\(Int($0))°C" } ?? "—"
+        return IconGauge(p: p, icon: .oil, value: v, caption: "حرارة الزيت",
+                         fraction: frac(r.oilC, 40, limits.oilDanger), color: p.color(limits.oilLevel(r.oilC)))
+    }
+    private var fuelGauge: some View {
+        let v: String = range.map { "\(Int($0)) كم" } ?? "—"
+        let c: String = r.fuelLevelPercent.map { String(format: "الديزل %.0f%%", $0) } ?? "الديزل"
+        let f: Double = (r.fuelLevelPercent ?? 0) / 100
+        return IconGauge(p: p, icon: .fuel, value: v, caption: c, fraction: f, color: fuelColor)
+    }
+    private var batteryGauge: some View {
+        let c: String = r.engineRunning ? "الدينمو يشحن" : "البطارية"
+        let col: Color = p.color(limits.voltageLevel(r.batteryV, engineRunning: r.engineRunning))
+        return IconGauge(p: p, icon: .battery, value: fmt(r.batteryV, "%.1f V"), caption: c, fraction: frac(r.batteryV, 11, 15), color: col)
+    }
+    private var railGauge: some View {
+        let v: String = r.railKPa.map { "\(Int($0 / 100)) بار" } ?? "—"
+        return IconGauge(p: p, icon: .rail, value: v, caption: "ضغط سكة الديزل", fraction: frac(r.railKPa, 0, 180_000), color: p.accent)
+    }
+    private var tireGauge: some View {
+        let v: String = minTire.map { "\(Int($0)) psi" } ?? "—"
+        let f: Double = (minTire ?? 0) / max(1, limits.tireRearPsi)
+        return IconGauge(p: p, icon: .tires, value: v, caption: "أقل كفر", fraction: f, color: tireColor)
+    }
+
     private var range: Double? { store.data.fuel.rangeKm(levelPercent: r.fuelLevelPercent) }
     private var fuelColor: Color {
         let l = limits.fuelLevel(percent: r.fuelLevelPercent, rangeKm: range)
         return l == .ok ? p.accent : p.color(l)
     }
-    private var minTire: Double? { [r.tires.frontLeft, r.tires.frontRight, r.tires.rearLeft, r.tires.rearRight].compactMap { $0 }.min() }
+    private var minTire: Double? {
+        let all: [Double?] = [r.tires.frontLeft, r.tires.frontRight, r.tires.rearLeft, r.tires.rearRight]
+        return all.compactMap { $0 }.min()
+    }
     private var tireColor: Color {
         let t = r.tires
-        let l = [limits.tireLevel(psi: t.frontLeft, front: true), limits.tireLevel(psi: t.frontRight, front: true),
-                 limits.tireLevel(psi: t.rearLeft, front: false), limits.tireLevel(psi: t.rearRight, front: false)].max() ?? .ok
+        let all: [AlertLevel] = [limits.tireLevel(psi: t.frontLeft, front: true), limits.tireLevel(psi: t.frontRight, front: true),
+                                 limits.tireLevel(psi: t.rearLeft, front: false), limits.tireLevel(psi: t.rearRight, front: false)]
+        let l: AlertLevel = all.max() ?? .ok
         return t.hasAny ? p.color(l) : p.sub
     }
 

@@ -77,28 +77,47 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         let l = store.data.limits
         let dark = interface?.carTraitCollection.userInterfaceStyle != .light
         let range = store.data.fuel.rangeKm(levelPercent: r.fuelLevelPercent)
-        let minTire = [r.tires.frontLeft, r.tires.frontRight, r.tires.rearLeft, r.tires.rearRight].compactMap { $0 }.min()
-        let tireLevel = [l.tireLevel(psi: r.tires.frontLeft, front: true), l.tireLevel(psi: r.tires.frontRight, front: true),
-                         l.tireLevel(psi: r.tires.rearLeft, front: false), l.tireLevel(psi: r.tires.rearRight, front: false)].max() ?? .ok
+        let tireValues: [Double?] = [r.tires.frontLeft, r.tires.frontRight, r.tires.rearLeft, r.tires.rearRight]
+        let minTire: Double? = tireValues.compactMap { $0 }.min()
+        let tireLevels: [AlertLevel] = [l.tireLevel(psi: r.tires.frontLeft, front: true), l.tireLevel(psi: r.tires.frontRight, front: true),
+                                        l.tireLevel(psi: r.tires.rearLeft, front: false), l.tireLevel(psi: r.tires.rearRight, front: false)]
+        let tireLevel: AlertLevel = tireLevels.max() ?? .ok
         let scan = store.lastScan
-        func frac(_ v: Double?, _ lo: Double, _ hi: Double) -> Double { v.map { ($0 - lo) / (hi - lo) } ?? 0 }
+        func frac(_ v: Double?, _ lo: Double, _ hi: Double) -> Double {
+            guard let v else { return 0 }
+            return (v - lo) / (hi - lo)
+        }
 
-        let specs: [(CarIcon, String, String, Double, AlertLevel?, () -> Void)] = [
-            (.coolant, r.coolantC.map { "\(Int($0))°" } ?? "—", "حرارة الماء", frac(r.coolantC, 40, l.coolantDanger), l.coolantLevel(r.coolantC), {}),
-            (.oil, r.oilC.map { "\(Int($0))°" } ?? "—", "حرارة الزيت", frac(r.oilC, 40, l.oilDanger), l.oilLevel(r.oilC), {}),
-            (.fuel, range.map { "\(Int($0))كم" } ?? "—", r.fuelLevelPercent.map { String(format: "الديزل %.0f%%", $0) } ?? "الديزل",
-             (r.fuelLevelPercent ?? 0) / 100, l.fuelLevel(percent: r.fuelLevelPercent, rangeKm: range), { [weak self] in self?.showFuelTab() }),
-            (.battery, fmt(r.batteryV, "%.1fV"), "البطارية", frac(r.batteryV, 11, 15), l.voltageLevel(r.batteryV, engineRunning: r.engineRunning), {}),
-            (.tires, minTire.map { "\(Int($0))" } ?? "—", r.tires.hasAny ? "أقل كفر psi" : "الكفرات",
-             (minTire ?? 0) / max(1, l.tireRearPsi), r.tires.hasAny ? tireLevel : nil, {}),
-            (.rail, r.railKPa.map { "\(Int($0 / 100))" } ?? "—", "سكة الديزل بار", frac(r.railKPa, 0, 180_000), nil, {}),
-            (.scan, link.scanning ? "…" : (scan.map { $0.healthy ? "سليم" : "\($0.allDTCs.count) كود" } ?? "ابدأ"), "فحص شامل",
-             1, scan.map { $0.healthy ? AlertLevel.ok : .warn }, { [weak self] in self?.link.requestScan() }),
-            (.station, "ديزل", "أقرب محطة", 1, nil, { [weak self] in self?.openNearestStation() }),
-        ]
+        struct Spec { var icon: CarIcon; var value: String; var title: String; var fraction: Double; var level: AlertLevel?; var action: () -> Void }
+        var specs: [Spec] = []
+        let coolantValue: String = r.coolantC.map { "\(Int($0))°" } ?? "—"
+        specs.append(Spec(icon: .coolant, value: coolantValue, title: "حرارة الماء",
+                          fraction: frac(r.coolantC, 40, l.coolantDanger), level: l.coolantLevel(r.coolantC), action: {}))
+        let oilValue: String = r.oilC.map { "\(Int($0))°" } ?? "—"
+        specs.append(Spec(icon: .oil, value: oilValue, title: "حرارة الزيت",
+                          fraction: frac(r.oilC, 40, l.oilDanger), level: l.oilLevel(r.oilC), action: {}))
+        let rangeValue: String = range.map { "\(Int($0))كم" } ?? "—"
+        let fuelTitle: String = r.fuelLevelPercent.map { String(format: "الديزل %.0f%%", $0) } ?? "الديزل"
+        let fuelFrac: Double = (r.fuelLevelPercent ?? 0) / 100
+        specs.append(Spec(icon: .fuel, value: rangeValue, title: fuelTitle, fraction: fuelFrac,
+                          level: l.fuelLevel(percent: r.fuelLevelPercent, rangeKm: range), action: { [weak self] in self?.showFuelTab() }))
+        specs.append(Spec(icon: .battery, value: fmt(r.batteryV, "%.1fV"), title: "البطارية", fraction: frac(r.batteryV, 11, 15),
+                          level: l.voltageLevel(r.batteryV, engineRunning: r.engineRunning), action: {}))
+        let tireValue: String = minTire.map { "\(Int($0))" } ?? "—"
+        let tireFrac: Double = (minTire ?? 0) / max(1, l.tireRearPsi)
+        let tireLvl: AlertLevel? = r.tires.hasAny ? tireLevel : nil
+        specs.append(Spec(icon: .tires, value: tireValue, title: r.tires.hasAny ? "أقل كفر psi" : "الكفرات", fraction: tireFrac, level: tireLvl, action: {}))
+        let railValue: String = r.railKPa.map { "\(Int($0 / 100))" } ?? "—"
+        specs.append(Spec(icon: .rail, value: railValue, title: "سكة الديزل بار", fraction: frac(r.railKPa, 0, 180_000), level: nil, action: {}))
+        var scanValue = "ابدأ"
+        var scanLevel: AlertLevel?
+        if link.scanning { scanValue = "…" } else if let scan { scanValue = scan.healthy ? "سليم" : "\(scan.allDTCs.count) كود"; scanLevel = scan.healthy ? .ok : .warn }
+        specs.append(Spec(icon: .scan, value: scanValue, title: "فحص شامل", fraction: 1, level: scanLevel, action: { [weak self] in self?.link.requestScan() }))
+        specs.append(Spec(icon: .station, value: "ديزل", title: "أقرب محطة", fraction: 1, level: nil, action: { [weak self] in self?.openNearestStation() }))
         return specs.map { s in
-            let img = GaugeImage.render(icon: s.0, value: s.1, fraction: s.3, level: s.4, dark: dark)
-            return CPGridButton(titleVariants: [s.2], image: img) { _ in s.5() }
+            let img = GaugeImage.render(icon: s.icon, value: s.value, fraction: s.fraction, level: s.level, dark: dark)
+            let action = s.action
+            return CPGridButton(titleVariants: [s.title], image: img) { _ in action() }
         }
     }
 

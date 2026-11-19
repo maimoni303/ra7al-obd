@@ -49,8 +49,9 @@ final class AlertCenter: ObservableObject {
             out.append(ActiveAlert(kind: .fuel, level: ft, title: ft == .danger ? "الديزل قارب يخلص" : "الديزل منخفض", message: km))
         }
         let t = r.tires
-        let tl = [l.tireLevel(psi: t.frontLeft, front: true), l.tireLevel(psi: t.frontRight, front: true),
-                  l.tireLevel(psi: t.rearLeft, front: false), l.tireLevel(psi: t.rearRight, front: false)].max() ?? .ok
+        let tireLevels: [AlertLevel] = [l.tireLevel(psi: t.frontLeft, front: true), l.tireLevel(psi: t.frontRight, front: true),
+                                        l.tireLevel(psi: t.rearLeft, front: false), l.tireLevel(psi: t.rearRight, front: false)]
+        let tl: AlertLevel = tireLevels.max() ?? .ok
         if tl != .ok {
             out.append(ActiveAlert(kind: .tires, level: tl, title: "ضغط الكفرات منخفض",
                                    message: "المعتمد \(Int(l.tireFrontPsi)) قدام و\(Int(l.tireRearPsi)) ورا."))

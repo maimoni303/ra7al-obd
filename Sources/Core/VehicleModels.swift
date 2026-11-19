@@ -228,7 +228,7 @@ struct ScanReport: Codable, Equatable, Identifiable {
         s -= min(60, allDTCs.count * 20)
         if milOn { s -= 15 }
         if limits.voltageLevel(batteryV, engineRunning: true) != .ok { s -= 5 }
-        let tireLevels = [limits.tireLevel(psi: tires.frontLeft, front: true), limits.tireLevel(psi: tires.frontRight, front: true),
+        let tireLevels: [AlertLevel] = [limits.tireLevel(psi: tires.frontLeft, front: true), limits.tireLevel(psi: tires.frontRight, front: true),
                           limits.tireLevel(psi: tires.rearLeft, front: false), limits.tireLevel(psi: tires.rearRight, front: false)]
         s -= tireLevels.filter { $0 != .ok }.count * 3
         if limits.coolantLevel(coolantC) != .ok { s -= 10 }
