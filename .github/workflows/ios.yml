@@ -1,35 +1,48 @@
 name: Build iOS
 on:
-  push: { branches: [main] }
+  push: { branches: ['**'] }
   workflow_dispatch:
 permissions: { contents: write }
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - run: sudo xcode-select -s /Applications/Xcode_16.4.app || true
       - run: brew install xcodegen && xcodegen generate
-      - name: Unit tests
+      - name: Unit + UI tests (simulator)
         run: |
           set -o pipefail
-          xcodebuild test -project RA7ALOBDProbe.xcodeproj -scheme RA7ALOBDProbe \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro Max' CODE_SIGNING_ALLOWED=NO | xcbeautify
-      - name: Unsigned IPA
+          xcodebuild test -project RA7ALOBD.xcodeproj -scheme RA7ALOBD \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro Max' -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO | xcbeautify
+      - name: Export screenshots
+        if: always()
         run: |
-          set -o pipefail
-          xcodebuild build -project RA7ALOBDProbe.xcodeproj -scheme RA7ALOBDProbe -configuration Release \
-            -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" | xcbeautify
-          mkdir -p Payload && cp -R build/Build/Products/Release-iphoneos/RA7ALOBDProbe.app Payload/
-          zip -qry RA7AL-OBD-Probe-unsigned.ipa Payload
+          mkdir -p shots
+          xcrun xcresulttool export attachments --path TestResults.xcresult --output-path shots || true
+          ls -la shots | head -50
       - uses: actions/upload-artifact@v4
-        with: { name: RA7AL-OBD-Probe-iOS, path: RA7AL-OBD-Probe-unsigned.ipa }
-      - name: Publish release (versioned file name so no cached copy is reused)
+        if: always()
+        with: { name: screenshots, path: shots }
+      - name: Unsigned IPA (entitlements embedded ad-hoc for re-signing)
+        run: |
+          set -o pipefail
+          xcodebuild build -project RA7ALOBD.xcodeproj -scheme RA7ALOBD -configuration Release \
+            -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" | xcbeautify
+          mkdir -p Payload && cp -R build/Build/Products/Release-iphoneos/RA7ALOBD.app Payload/
+          codesign -f -s - --entitlements Resources/RA7ALOBD.entitlements Payload/RA7ALOBD.app
+          codesign -d --entitlements - Payload/RA7ALOBD.app || true
+          zip -qry RA7AL-OBD-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with: { name: RA7AL-OBD-iOS, path: RA7AL-OBD-unsigned.ipa }
+      - name: Publish release (main only, versioned file name)
+        if: github.ref == 'refs/heads/main'
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           V=$(grep MARKETING_VERSION project.yml | head -1 | sed 's/[^0-9.]//g')
-          F="RA7AL-OBD-Probe-v${V}.ipa"
-          cp RA7AL-OBD-Probe-unsigned.ipa "$F"
+          F="RA7AL-OBD-v${V}.ipa"
+          cp RA7AL-OBD-unsigned.ipa "$F"
           gh release delete latest -y --cleanup-tag || true
-          gh release create latest "$F" -t "RA7AL OBD Probe v${V} (latest)" -n "Version ${V} — build ${GITHUB_SHA}"
+          gh release create latest "$F" -t "RA7AL OBD v${V}" -n "Version ${V} — build ${GITHUB_SHA}"

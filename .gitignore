@@ -2,3 +2,7 @@ build/
 Payload/
 *.ipa
 *.xcodeproj/
+TestResults.xcresult/
+shots/
+Resources/Info.plist
+Resources/RA7ALOBD.entitlements

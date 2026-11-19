@@ -1,5 +1,5 @@
 import XCTest
-@testable import RA7ALOBDProbe
+@testable import RA7ALOBD
 
 final class ProbeLogicTests: XCTestCase {
     func testHexAndAscii() {

@@ -1,4 +1,4 @@
-name: RA7ALOBDProbe
+name: RA7ALOBD
 options:
   bundleIdPrefix: com.ra7al
   deploymentTarget:
@@ -7,48 +7,74 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.10"
-    MARKETING_VERSION: "0.3.0"
-    CURRENT_PROJECT_VERSION: "3"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "4"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
 targets:
-  RA7ALOBDProbe:
+  RA7ALOBD:
     type: application
     platform: iOS
     sources:
       - path: Sources
+    entitlements:
+      path: Resources/RA7ALOBD.entitlements
+      properties:
+        com.apple.developer.carplay-driving-task: true
     info:
       path: Resources/Info.plist
       properties:
-        CFBundleDisplayName: "RA7AL OBD فحص"
-        CFBundleName: "RA7AL OBD Probe"
+        CFBundleDisplayName: "RA7AL OBD"
+        CFBundleName: "RA7AL OBD"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         CFBundleDevelopmentRegion: ar
         CFBundleLocalizations: [ar, en]
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
-        UIBackgroundModes: [bluetooth-central]
-        NSBluetoothAlwaysUsageDescription: "يتصل التطبيق بقطعة OBD في سيارتك عبر البلوتوث لقراءة بياناتها."
+        UIBackgroundModes: [bluetooth-central, audio]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSBluetoothAlwaysUsageDescription: "يتصل التطبيق بقطعة OBD في سيارتك عبر البلوتوث لقراءة بياناتها وفحصها تلقائيًا."
+        NSLocationWhenInUseUsageDescription: "لعرض أقرب محطات الديزل على الخريطة."
+        NSLocalNetworkUsageDescription: "للاتصال بالداشكام عبر شبكتها."
+        LSApplicationQueriesSchemes: [comgooglemaps]
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+          UISceneConfigurations:
+            CPTemplateApplicationSceneSessionRoleApplication:
+              - UISceneConfigurationName: "CarPlay"
+                UISceneDelegateClassName: "$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.ra7al.obd.probe
+        PRODUCT_BUNDLE_IDENTIFIER: com.ra7al.obd
+        PRODUCT_MODULE_NAME: RA7ALOBD
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: false
-  RA7ALOBDProbeTests:
+  RA7ALOBDTests:
     type: bundle.unit-test
     platform: iOS
     sources:
       - path: Tests
     dependencies:
-      - target: RA7ALOBDProbe
+      - target: RA7ALOBD
+  RA7ALOBDUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: RA7ALOBD
 schemes:
-  RA7ALOBDProbe:
+  RA7ALOBD:
     build:
       targets:
-        RA7ALOBDProbe: all
-        RA7ALOBDProbeTests: [test]
+        RA7ALOBD: all
+        RA7ALOBDTests: [test]
+        RA7ALOBDUITests: [test]
     test:
       targets:
-        - RA7ALOBDProbeTests
+        - RA7ALOBDTests
+        - RA7ALOBDUITests

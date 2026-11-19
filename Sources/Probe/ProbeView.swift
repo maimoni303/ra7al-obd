@@ -1,22 +1,11 @@
 import SwiftUI
 
-@main
-struct RA7ALOBDProbeApp: App {
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .environment(\.layoutDirection, .rightToLeft)
-                .preferredColorScheme(.dark)
-        }
-    }
-}
-
-struct ContentView: View {
+/// Adapter discovery tool kept inside the app (Settings ▸ أداة فحص القطعة).
+struct ProbeView: View {
     @StateObject private var probe = BLEProbe()
     private let accent = Color(red: 0.13, green: 0.83, blue: 0.93)
 
     var body: some View {
-        NavigationStack {
             List {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
@@ -83,8 +72,7 @@ struct ContentView: View {
                     }
                 }
             }
-            .navigationTitle("RA7AL OBD")
-        }
-        .tint(accent)
+            .navigationTitle("أداة فحص القطعة")
+            .tint(accent)
     }
 }
