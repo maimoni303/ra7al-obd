@@ -72,6 +72,7 @@ struct RootView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("الإعدادات")
+            .accessibilityIdentifier("settings")
         }
         .frame(height: 50)
         .padding(.top, 4)
@@ -95,6 +96,7 @@ struct RootView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("مظهر \(t.title)")
+                .accessibilityIdentifier("theme-\(t.rawValue)")
             }
         }
         .padding(3)
@@ -116,6 +118,7 @@ struct RootView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(t.title)
+                .accessibilityIdentifier("tab-\(t.rawValue)")
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
         }

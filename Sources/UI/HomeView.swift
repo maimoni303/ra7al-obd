@@ -116,6 +116,7 @@ struct HomeView: View {
         .buttonStyle(.plain)
         .accessibilityLabel("صحة السيارة \(score.map { "\($0)%" } ?? "")")
         .accessibilityHint("يعرض تفاصيل آخر فحص")
+        .accessibilityIdentifier("health")
     }
 
     private func heroTitle(_ s: ScanReport?) -> String {

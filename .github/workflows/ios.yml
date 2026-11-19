@@ -26,9 +26,15 @@ jobs:
           mkdir -p shots
           xcrun xcresulttool export attachments --path TestResults.xcresult --output-path shots || true
           ls -la shots | head -50
-      - uses: actions/upload-artifact@v4
+      - name: Push screenshots to the ci-screenshots branch
         if: always()
-        with: { name: screenshots, path: shots }
+        run: |
+          [ -d shots ] && [ "$(ls shots | wc -l)" -gt 0 ] || exit 0
+          cd shots
+          git init -q -b ci-screenshots
+          git config user.name "ci"; git config user.email "ci@users.noreply.github.com"
+          git add -A && git commit -qm "screenshots ${GITHUB_SHA}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-screenshots
       - name: Unsigned IPA (entitlements embedded ad-hoc for re-signing)
         run: |
           set -o pipefail
