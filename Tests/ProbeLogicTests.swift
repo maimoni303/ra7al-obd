@@ -80,4 +80,13 @@ final class ProbeLogicTests: XCTestCase {
         let r = "ECU:1  CMD:0902  CNT:20\r\n0: 49 02 01 31 46 54\r\n1: 37 57 32 42 54 34 4B\r\n2: 45 44 31 32 33 34 35\r\n"
         XCTAssertEqual(ProbeLogic.vin(fromReply: r), "1FT7W2BT4KED12345")
     }
+
+    func testNondaStreamFields() {
+        let t = "BD$V14.5;R00608;S000\n;GX1;GY-6;GZ-63;@3\r\n;P000.0;O022.7;C048;\r\nL046.6;XH007.967;M00\r\nBD$V14.4;R00607;S000\r\n#ATZ$ELM327 v1.5\r\n"
+        let f = Dictionary(uniqueKeysWithValues: ProbeLogic.streamFields(t).map { ($0.key, $0.value) })
+        XCTAssertEqual(f["V"], "14.4"); XCTAssertEqual(f["R"], "00607"); XCTAssertEqual(f["S"], "000")
+        XCTAssertEqual(f["GY"], "-6"); XCTAssertEqual(f["@"], "3"); XCTAssertEqual(f["C"], "048")
+        XCTAssertEqual(f["XH"], "007.967"); XCTAssertEqual(f["O"], "022.7")
+        XCTAssertNil(f["ELM327 v1.5"])
+    }
 }

@@ -200,4 +200,26 @@ enum ProbeLogic {
         }
         return codes
     }
+
+    // MARK: - NONDA passive stream ("BD$V14.5;R00608;S000;GX1;GY-6;GZ-63;@3 …")
+
+    /// Latest value of every key the adapter pushes on its own, in first-seen order.
+    static func streamFields(_ text: String) -> [(key: String, value: String)] {
+        var order: [String] = []
+        var latest: [String: String] = [:]
+        let lines = text.replacingOccurrences(of: "\r", with: "\n").split(separator: "\n")
+        for line in lines where line.contains(";") || line.hasPrefix("BD$") {
+            var l = String(line)
+            if let r = l.range(of: "BD$") { l = String(l[r.upperBound...]) }
+            for tok in l.split(separator: ";") {
+                let t = tok.trimmingCharacters(in: .whitespaces)
+                guard let m = t.range(of: #"^(XH|GX|GY|GZ|[A-Z@])-?[0-9]+(\.[0-9]+)?$"#, options: .regularExpression), m == t.startIndex..<t.endIndex else { continue }
+                let key = t.hasPrefix("XH") || t.hasPrefix("GX") || t.hasPrefix("GY") || t.hasPrefix("GZ") ? String(t.prefix(2)) : String(t.prefix(1))
+                let val = String(t.dropFirst(key.count))
+                if latest[key] == nil { order.append(key) }
+                latest[key] = val
+            }
+        }
+        return order.map { ($0, latest[$0]!) }
+    }
 }

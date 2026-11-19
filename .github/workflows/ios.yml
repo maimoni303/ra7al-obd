@@ -25,8 +25,11 @@ jobs:
           zip -qry RA7AL-OBD-Probe-unsigned.ipa Payload
       - uses: actions/upload-artifact@v4
         with: { name: RA7AL-OBD-Probe-iOS, path: RA7AL-OBD-Probe-unsigned.ipa }
-      - name: Publish to "latest" release
+      - name: Publish release (versioned file name so no cached copy is reused)
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
+          V=$(grep MARKETING_VERSION project.yml | head -1 | sed 's/[^0-9.]//g')
+          F="RA7AL-OBD-Probe-v${V}.ipa"
+          cp RA7AL-OBD-Probe-unsigned.ipa "$F"
           gh release delete latest -y --cleanup-tag || true
-          gh release create latest RA7AL-OBD-Probe-unsigned.ipa -t "RA7AL OBD Probe (latest)" -n "Build ${GITHUB_SHA}"
+          gh release create latest "$F" -t "RA7AL OBD Probe v${V} (latest)" -n "Version ${V} — build ${GITHUB_SHA}"

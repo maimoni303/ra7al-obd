@@ -24,6 +24,7 @@ final class BLEProbe: NSObject, ObservableObject {
     private var writable: [CBCharacteristic] = []
     private var lastReplyAt = Date()
     private var replyBuffer = ""
+    private var streamText = ""
     private var elmCharacteristics: Set<String> = []
     private var pendingServices = 0
 
@@ -154,6 +155,10 @@ final class BLEProbe: NSObject, ObservableObject {
     }
 
     private func finish() {
+        let fields = ProbeLogic.streamFields(streamText)
+        if !fields.isEmpty {
+            summary.append("بث القطعة التلقائي: " + fields.map { "\($0.key)=\($0.value)" }.joined(separator: " "))
+        }
         state = "انتهى الفحص — شارك التقرير"
         isRunning = false
         add("PROBE done")
@@ -247,7 +252,7 @@ extension BLEProbe: CBPeripheralDelegate {
         guard let v = ch.value.map({ Data($0) }) else { return }
         Task { @MainActor in
             let text = String(decoding: v, as: UTF8.self)
-            replyBuffer += text; lastReplyAt = Date()
+            replyBuffer += text; streamText += text; lastReplyAt = Date()
             add("VAL \(ch.uuid.uuidString) hex=\(ProbeLogic.hex(v)) ascii=\(ProbeLogic.ascii(v))")
         }
     }
