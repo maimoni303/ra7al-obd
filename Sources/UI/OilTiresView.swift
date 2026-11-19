@@ -104,7 +104,10 @@ struct TPMSCalibrationView: View {
     let p: Palette
     @ObservedObject var store = VehicleStore.shared
     @Environment(\.dismiss) private var dismiss
-    @State private var fl = "", fr = "", rl = "", rr = ""
+    @State private var fl = ""
+    @State private var fr = ""
+    @State private var rl = ""
+    @State private var rr = ""
     @State private var result: String?
 
     var body: some View {
