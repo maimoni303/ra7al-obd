@@ -157,7 +157,12 @@ struct TPMSCalibration: Codable, Equatable {
         let candidates: [(Double, Double)] = [(0.05, 0), (0.05, -14.7), (1.0 / 6.895, 0), (0.1, 0), (1.0 / 6.895 / 10, 0), (0.0145, 0)]
         var best: (TPMSCalibration, Double)?
         for (s, o) in candidates {
-            let err = zip(raw, dash).map { abs(Double($0) * s + o - $1) }.reduce(0, +) / Double(raw.count)
+            var total = 0.0
+            for i in 0..<raw.count {
+                let predicted: Double = Double(raw[i]) * s + o
+                total += abs(predicted - dash[i])
+            }
+            let err: Double = total / Double(raw.count)
             if best == nil || err < best!.1 { best = (TPMSCalibration(scale: s, offset: o, confirmed: err < 2), err) }
         }
         return best?.0
