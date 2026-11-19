@@ -36,14 +36,14 @@ struct SettingsView: View {
                     Button("حفظ", action: saveOdometer)
                 }
                 if let v = store.data.vin { row("رقم الهيكل", v) }
-                row("متوسط الاستهلاك المتعلم", String(format: "%.1f ل/100 كم", store.data.fuel.avgLper100))
+                row("متوسط الاستهلاك المتعلم", String(format: "%.1f L/100km", store.data.fuel.avgLper100))
             }
 
             Section("الزيت") {
                 stepper("التغيير كل", $store.data.oil.intervalKm, 3000...20000, "كم", step: 500)
                 stepper("أو كل ساعات تشغيل", $store.data.oil.intervalEngineHours, 100...600, "ساعة", step: 25)
                 stepper("أو كل", $store.data.oil.intervalDays, 60...365, "يوم", step: 15)
-                if let d = store.data.oil.lastChangeDate { row("آخر تغيير", d.formatted(date: .abbreviated, time: .omitted)) }
+                if let d = store.data.oil.lastChangeDate { row("آخر تغيير", arDate(d, time: false)) }
             }
 
             Section("الفحص التلقائي") {
@@ -57,6 +57,7 @@ struct SettingsView: View {
                 row("بث القطعة التلقائي", link.streamActive ? "يعمل" : "متوقف")
                 NavigationLink("أداة فحص القطعة") {
                     ProbeView()
+                        .arabicBackButton()
                         .onAppear { link.pause() }
                         .onDisappear { link.resume() }
                 }
@@ -69,6 +70,7 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("الإعدادات")
+        .arabicBackButton()
         .navigationBarTitleDisplayMode(.inline)
         .scrollContentBackground(.hidden)
         .background(p.bg.ignoresSafeArea())

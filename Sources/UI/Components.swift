@@ -153,3 +153,32 @@ struct TireDiagram: View {
 }
 
 func fmt(_ v: Double?, _ f: String = "%.0f") -> String { v.map { String(format: f, $0) } ?? "—" }
+
+let arabicLocale = Locale(identifier: "ar")
+
+func arDate(_ d: Date, time: Bool = true) -> String {
+    d.formatted(Date.FormatStyle(date: .abbreviated, time: time ? .shortened : .omitted).locale(arabicLocale))
+}
+
+/// Same back button, same place and size, on every pushed page.
+struct ArabicBackButton: ViewModifier {
+    @Environment(\.dismiss) private var dismiss
+    func body(content: Content) -> some View {
+        content
+            .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { dismiss() } label: {
+                        HStack(spacing: 4) { Image(systemName: "chevron.forward"); Text("رجوع") }
+                            .font(.system(size: 17, weight: .semibold))
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityIdentifier("back")
+                }
+            }
+    }
+}
+
+extension View {
+    func arabicBackButton() -> some View { modifier(ArabicBackButton()) }
+}

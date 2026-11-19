@@ -156,8 +156,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         return [
             CPInformationItem(title: "المسافة المتبقية", detail: range.map { "\(Int($0)) كم" } ?? "—"),
             CPInformationItem(title: "في التانكي", detail: r.fuelLevelPercent.map { String(format: "%.0f%% · %.0f لتر", $0, fuel.litersLeft(levelPercent: $0)) } ?? "—"),
-            CPInformationItem(title: "متوسط استهلاكك", detail: String(format: "%.1f ل/100 كم", fuel.avgLper100)),
-            CPInformationItem(title: "الاستهلاك الآن", detail: fmt(r.fuelRateLh, "%.1f لتر/ساعة")),
+            CPInformationItem(title: "متوسط استهلاكك", detail: String(format: "%.1f L/100km", fuel.avgLper100)),
+            CPInformationItem(title: "الاستهلاك الآن", detail: fmt(r.fuelRateLh, "%.1f L/h")),
         ]
     }
 

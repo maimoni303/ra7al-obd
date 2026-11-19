@@ -48,7 +48,7 @@ final class ScreensUITests: XCTestCase {
         tap("settings");       shot("10-settings")
         app.swipeUp();          shot("11-settings-more")
         app.swipeUp();          shot("12-settings-end")
-        app.navigationBars.buttons.firstMatch.tap()
+        tap("back")
         XCTAssertTrue(app.buttons["tab-home"].waitForExistence(timeout: 5))
 
         tap("tab-home")

@@ -96,9 +96,9 @@ struct FuelView: View {
             }
             .frame(height: 14)
             HStack {
-                stat("في التانكي", level.map { String(format: "%.0f / %.0f ل", store.data.fuel.litersLeft(levelPercent: $0), store.data.fuel.tankLiters) } ?? "—")
-                stat("متوسطك", String(format: "%.1f ل/100", store.data.fuel.avgLper100))
-                stat("الآن", fmt(link.readings.fuelRateLh, "%.1f ل/س"))
+                stat("في التانكي", level.map { String(format: "%.0f من %.0f لتر", store.data.fuel.litersLeft(levelPercent: $0), store.data.fuel.tankLiters) } ?? "—")
+                stat("متوسطك", String(format: "%.1f L/100km", store.data.fuel.avgLper100))
+                stat("الآن", fmt(link.readings.fuelRateLh, "%.1f L/h"))
             }
             Text("الحساب يتعلم من استهلاكك الحقيقي، ويصير أدق مع كل مشوار.").font(.system(size: 11)).foregroundStyle(p.sub)
         }
@@ -155,7 +155,7 @@ struct FuelView: View {
             Text("آخر التعبئات").font(.system(size: 14, weight: .semibold)).foregroundStyle(p.text)
             ForEach(store.data.fuel.refuels.suffix(5).reversed(), id: \.date) { r in
                 HStack {
-                    Text(r.date.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(p.sub)
+                    Text(arDate(r.date)).foregroundStyle(p.sub)
                     Spacer()
                     Text(String(format: "+%.0f لتر", r.liters)).foregroundStyle(p.text)
                 }

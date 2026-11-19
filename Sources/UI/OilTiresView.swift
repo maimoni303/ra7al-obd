@@ -24,7 +24,7 @@ struct OilTiresView: View {
         } message: {
             Text(String(format: "يبدأ العداد من جديد على %.0f كم.", oil.odometerKm))
         }
-        .sheet(isPresented: $showCalibrate) { TPMSCalibrationView(p: p) }
+        .sheet(isPresented: $showCalibrate) { TPMSCalibrationView(p: p).environment(\.layoutDirection, .rightToLeft) }
     }
 
     private var oilCard: some View {

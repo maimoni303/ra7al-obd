@@ -30,7 +30,7 @@ struct HomeView: View {
             .padding(.bottom, 8)
         }
         .scrollIndicators(.hidden)
-        .sheet(isPresented: $showScan) { ScanReportView(p: p) }
+        .sheet(isPresented: $showScan) { ScanReportView(p: p).environment(\.layoutDirection, .rightToLeft) }
     }
 
     private var gaugeGrid: some View {
@@ -177,7 +177,7 @@ struct ScanReportView: View {
             List {
                 if let s = store.lastScan {
                     Section("آخر فحص") {
-                        row("التاريخ", s.date.formatted(date: .abbreviated, time: .shortened))
+                        row("التاريخ", arDate(s.date))
                         row("لمبة فحص المحرك", s.milOn ? "مضاءة" : "مطفأة")
                         row("رقم الهيكل", s.vin ?? store.data.vin ?? "—")
                         row("البطارية", fmt(s.batteryV, "%.1f V"))
@@ -207,7 +207,7 @@ struct ScanReportView: View {
                 if store.data.scans.count > 1 {
                     Section("الفحوصات السابقة") {
                         ForEach(store.data.scans.dropFirst()) { s in
-                            row(s.date.formatted(date: .abbreviated, time: .shortened), s.healthy ? "سليم" : "\(s.allDTCs.count) كود")
+                            row(arDate(s.date), s.healthy ? "سليم" : "\(s.allDTCs.count) كود")
                         }
                     }
                 }
@@ -231,7 +231,7 @@ struct ScanReportView: View {
     }
 
     private func text(_ s: ScanReport) -> String {
-        var t = "تقرير RA7AL OBD — \(s.date.formatted())\n"
+        var t = "تقرير RA7AL OBD — \(arDate(s.date))\n"
         t += "VIN: \(s.vin ?? "-")\nلمبة المحرك: \(s.milOn ? "مضاءة" : "مطفأة")\n"
         t += "الأكواد: " + (s.allDTCs.isEmpty ? "لا يوجد" : s.allDTCs.map { "\($0) \(DTCText.describe($0))" }.joined(separator: "\n")) + "\n"
         t += "البطارية: \(fmt(s.batteryV, "%.1f")) V · الماء: \(fmt(s.coolantC))°C · الزيت: \(fmt(s.oilC))°C\n"

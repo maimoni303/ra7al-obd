@@ -21,7 +21,7 @@ struct DashcamView: View {
         .task { if case .idle = cam.state { await cam.check(preferred: store.data.dashcamHost) } }
         .onDisappear { cam.stopLive() }
         .sheet(item: $playing) { c in
-            VideoPlayer(player: AVPlayer(url: c.url)).ignoresSafeArea()
+            VideoPlayer(player: AVPlayer(url: c.url)).ignoresSafeArea().environment(\.layoutDirection, .rightToLeft)
         }
     }
 
