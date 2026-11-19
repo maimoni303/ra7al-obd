@@ -86,12 +86,12 @@ final class DashcamClient: ObservableObject {
 
     // MARK: Pure helpers (tested)
 
-    static func isNovatekOK(_ xml: String) -> Bool {
+    nonisolated static func isNovatekOK(_ xml: String) -> Bool {
         xml.contains("<Function>") && xml.range(of: #"<Status>\s*0\s*</Status>"#, options: .regularExpression) != nil
     }
 
     /// `<File><NAME>2026_1119_074200_F.MP4</NAME><FPATH>A:\CARDV\MOVIE\2026_1119_074200_F.MP4</FPATH>…<TIME>2026/11/19 07:42:00</TIME></File>`
-    static func parseFileList(_ xml: String, host: String) -> [Clip] {
+    nonisolated static func parseFileList(_ xml: String, host: String) -> [Clip] {
         var out: [Clip] = []
         let files = xml.components(separatedBy: "<File>").dropFirst()
         for f in files {

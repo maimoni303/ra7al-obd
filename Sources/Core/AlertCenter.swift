@@ -29,7 +29,7 @@ final class AlertCenter: ObservableObject {
     }
 
     /// Pure evaluation, exposed for tests.
-    static func alerts(for r: Readings, data: AppData) -> [ActiveAlert] {
+    nonisolated static func alerts(for r: Readings, data: AppData) -> [ActiveAlert] {
         let l = data.limits
         var out: [ActiveAlert] = []
         let ct = l.coolantLevel(r.coolantC)
