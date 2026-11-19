@@ -20,7 +20,7 @@ struct ContentView: View {
             List {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("أداة فحص القطعة").font(.title2.bold())
+                        Text("أداة فحص القطعة — v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")").font(.title2.bold())
                         Text("شغّل السيارة، وأغلق تطبيق ZUS تمامًا، ثم اضغط بحث واختر القطعة (OBDBLE). الفحص يقرأ فقط ولا يغيّر شيئًا في السيارة.")
                             .font(.footnote).foregroundStyle(.secondary)
                         Text(probe.state).font(.callout.bold()).foregroundStyle(accent)

@@ -117,9 +117,10 @@ final class BLEProbe: NSObject, ObservableObject {
                 let reply = await send(cmd, to: ch, on: p, timeout: cmd == "ATZ" || cmd.hasPrefix("01") || cmd.hasPrefix("09") ? 6 : 2.5)
                 if ProbeLogic.looksLikeELM(reply) { gotELM = true }
                 if let ft = ProbeLogic.fuelType(fromReply: reply) { summary.append("نوع الوقود: \(ft)") }
-                if let v = ProbeLogic.vin(fromReply: reply) { summary.append("رقم الهيكل: \(v)") }
-                // If the first three commands get nothing at all, this char is not an ELM pipe.
-                if !gotELM && cmd == "ATI" && reply.isEmpty { add("no reply on \(id), skipping"); break }
+                if cmd == "0902", let v = ProbeLogic.vin(fromReply: reply) { summary.append("رقم الهيكل: \(v)") }
+                record(cmd: cmd, reply: reply)
+                // If reset and echo-off get nothing at all, this char is not an ELM pipe.
+                if !gotELM && cmd == "ATE0" && reply.isEmpty { add("no reply on \(id), skipping"); break }
             }
             if gotELM { elmCharacteristics.insert(id) }
         }
@@ -129,6 +130,27 @@ final class BLEProbe: NSObject, ObservableObject {
             summary.insert("النتيجة: القطعة تفهم أوامر ELM327 على: \(elmCharacteristics.sorted().joined(separator: ", "))", at: 0)
         }
         finish()
+    }
+
+    /// Turns each reply into readable summary lines.
+    private func record(cmd: String, reply: String) {
+        let c = cmd.uppercased()
+        if c == "ATRV", !reply.isEmpty { summary.append("جهد البطارية: \(reply.trimmingCharacters(in: .whitespacesAndNewlines))") }
+        if c == "ATDP", !reply.isEmpty { summary.append("البروتوكول: \(ProbeLogic.stripChatter(reply).trimmingCharacters(in: .whitespacesAndNewlines))") }
+        if c.hasPrefix("01"), c.count == 4, let pid = UInt8(c.suffix(2), radix: 16) {
+            if pid % 0x20 == 0 {
+                let list = ProbeLogic.supportedPIDs(base: pid, in: reply)
+                if !list.isEmpty { summary.append("مدعوم \(c): " + list.map { String(format: "%02X", $0) }.joined(separator: " ")) }
+            } else if pid != 0x51, let d = ProbeLogic.mode01(pid, in: reply), let txt = ProbeLogic.describe(pid: pid, data: d) {
+                summary.append(txt)
+            }
+        }
+        let dtcServices: [String: (UInt8, String)] = ["03": (0x03, "أكواد مخزنة"), "07": (0x07, "أكواد معلقة"), "0A": (0x0A, "أكواد دائمة")]
+        if let entry = dtcServices[c] {
+            let (svc, label) = entry
+            let codes = ProbeLogic.troubleCodes(service: svc, in: reply)
+            summary.append("\(label): " + (codes.isEmpty ? "لا يوجد" : codes.joined(separator: ", ")))
+        }
     }
 
     private func finish() {
@@ -148,7 +170,8 @@ final class BLEProbe: NSObject, ObservableObject {
         while Date().timeIntervalSince(start) < timeout {
             try? await Task.sleep(nanoseconds: 100_000_000)
             if replyBuffer.contains(">") { break }
-            if !replyBuffer.isEmpty && Date().timeIntervalSince(lastReplyAt) > 0.8 { break }
+            // This adapter sends no '>' prompt; wait for silence so every ECU's answer is in.
+            if !replyBuffer.isEmpty && Date().timeIntervalSince(lastReplyAt) > 1.2 { break }
         }
         add("RX[\(cmd)] \(replyBuffer.isEmpty ? "(لا رد)" : replyBuffer)")
         return replyBuffer
@@ -220,8 +243,9 @@ extension BLEProbe: CBPeripheralDelegate {
         }
     }
     nonisolated func peripheral(_ p: CBPeripheral, didUpdateValueFor ch: CBCharacteristic, error: Error?) {
+        // Copy the bytes now: ch.value is overwritten by the next notification before the Task runs.
+        guard let v = ch.value.map({ Data($0) }) else { return }
         Task { @MainActor in
-            guard let v = ch.value else { return }
             let text = String(decoding: v, as: UTF8.self)
             replyBuffer += text; lastReplyAt = Date()
             add("VAL \(ch.uuid.uuidString) hex=\(ProbeLogic.hex(v)) ascii=\(ProbeLogic.ascii(v))")
