@@ -14,8 +14,10 @@ jobs:
       - name: Unit + UI tests (simulator)
         run: |
           set -o pipefail
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k,v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone') and 'Pro Max' in x['name']] or [x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')]; print(c[0]['udid'])")
+          echo "Simulator: $UDID"
           xcodebuild test -project RA7ALOBD.xcodeproj -scheme RA7ALOBD \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro Max' -resultBundlePath TestResults.xcresult \
+            -destination "id=$UDID" -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log | xcbeautify
       - name: Show compiler errors
         if: failure()
