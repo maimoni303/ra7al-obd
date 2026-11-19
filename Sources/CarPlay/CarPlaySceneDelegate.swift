@@ -148,7 +148,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private func showFuelTab() {
         guard let tabs = interface?.rootTemplate as? CPTabBarTemplate, let fi = fuelInfo else { return }
-        tabs.selectTemplate(fi)
+        tabs.select(fi)
     }
 
     /// Hands navigation to Google Maps on the car screen (CarPlay apps may not draw maps themselves).
