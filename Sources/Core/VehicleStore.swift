@@ -24,6 +24,10 @@ struct AppData: Codable, Equatable {
     var scans: [ScanReport] = []
     var tpms = TPMSCalibration()
     var lastTPMSRaw: [String: Int] = [:]
+    // Added in 1.0.3 — optional so data saved by older versions still loads.
+    var tpmsStatus: String?
+    var tpmsDiag: [String]?
+    var tpmsReadAt: Date?
     var dashcamHost: String?
     var speakAlerts = true
     var autoScanOnConnect = true

@@ -6,6 +6,7 @@ struct OilTiresView: View {
     @ObservedObject var link = OBDLink.shared
     @State private var confirmChange = false
     @State private var showCalibrate = false
+    @State private var showTireDiag = false
 
     private var oil: OilModel { store.data.oil }
 
@@ -25,6 +26,7 @@ struct OilTiresView: View {
             Text(String(format: "يبدأ العداد من جديد على %.0f كم.", oil.odometerKm))
         }
         .sheet(isPresented: $showCalibrate) { TPMSCalibrationView(p: p).environment(\.layoutDirection, .rightToLeft) }
+        .sheet(isPresented: $showTireDiag) { TPMSDiagnosticsView(p: p).environment(\.layoutDirection, .rightToLeft) }
     }
 
     private var oilCard: some View {
@@ -83,11 +85,19 @@ struct OilTiresView: View {
                     .font(.system(size: 12)).foregroundStyle(p.sub)
             }
             TireDiagram(p: p, tires: tires, limits: store.data.limits)
-            if !tires.hasAny {
-                Text(tireHint).font(.system(size: 12)).foregroundStyle(p.sub)
-                if !store.data.lastTPMSRaw.isEmpty && !store.data.tpms.confirmed {
-                    SecondaryButton(p: p, title: "معايرة الكفرات (مرة وحدة)", icon: "slider.horizontal.3") { showCalibrate = true }
+            Text(tireHint).font(.system(size: 12)).foregroundStyle(p.sub)
+            SecondaryButton(p: p, title: "اقرأ الكفرات الآن", icon: "arrow.clockwise") { link.requestTires() }
+                .accessibilityIdentifier("read-tires")
+            if store.data.tpmsDiag != nil {
+                Button { showTireDiag = true } label: {
+                    Text("تفاصيل القراءة").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.accent)
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("tires-details")
+            }
+            if !tires.hasAny && !store.data.lastTPMSRaw.isEmpty && !store.data.tpms.confirmed {
+                SecondaryButton(p: p, title: "معايرة الكفرات (مرة وحدة)", icon: "slider.horizontal.3") { showCalibrate = true }
             }
         }
         .padding(16)
@@ -95,8 +105,9 @@ struct OilTiresView: View {
     }
 
     private var tireHint: String {
-        if store.data.lastTPMSRaw.isEmpty { return "تظهر القيم بعد أول فحص شامل إذا القطعة توصل لوحدة الكفرات." }
-        return "القطعة قرأت وحدة الكفرات. اكتب الأرقام اللي في الطبلون مرة وحدة عشان يتعلم التطبيق طريقة قراءتها."
+        var t = store.data.tpmsStatus ?? "اضغط «اقرأ الكفرات الآن» والقطعة متصلة."
+        if let d = store.data.tpmsReadAt { t += " · " + arDate(d) }
+        return t
     }
 }
 
@@ -148,5 +159,44 @@ struct TPMSCalibrationView: View {
         } else {
             result = "الأرقام ما تطابق أي طريقة معروفة. أرسل لقطة من هذي الشاشة للتحديث الجاي."
         }
+    }
+}
+
+
+/// What the adapter answered during the last tyre read — to share if the tyres still don't show.
+struct TPMSDiagnosticsView: View {
+    let p: Palette
+    @ObservedObject var store = VehicleStore.shared
+    @Environment(\.dismiss) private var dismiss
+
+    private var text: String {
+        var lines = ["RA7AL OBD — تفاصيل قراءة الكفرات"]
+        if let d = store.data.tpmsReadAt { lines.append(arDate(d)) }
+        lines.append(store.data.tpmsStatus ?? "")
+        lines += store.data.tpmsDiag ?? []
+        if !store.data.lastTPMSRaw.isEmpty {
+            lines.append("الخام: " + store.data.lastTPMSRaw.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " "))
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let s = store.data.tpmsStatus { Section { Text(s) } }
+                Section("ردود القطعة") {
+                    ForEach(Array((store.data.tpmsDiag ?? []).enumerated()), id: \.offset) { _, line in
+                        Text(line).font(.system(size: 12, design: .monospaced)).environment(\.layoutDirection, .leftToRight)
+                    }
+                }
+                Section {
+                    ShareLink(item: text) { Label("مشاركة التفاصيل", systemImage: "square.and.arrow.up") }
+                }
+            }
+            .navigationTitle("تفاصيل قراءة الكفرات")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("إغلاق") { dismiss() } } }
+        }
+        .preferredColorScheme(p.scheme)
     }
 }

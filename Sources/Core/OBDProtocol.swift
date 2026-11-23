@@ -143,6 +143,48 @@ enum OBDProtocol {
     /// Ford modules differ in how they scale TPMS values, so the app learns the scale once from the dash
     /// readout (see `TPMSCalibration`) and only shows pressures after that.
     static func psi(raw: Int, scale: Double, offset: Double) -> Double { Double(raw) * scale + offset }
+
+    /// Known Ford TPMS encodings, most common first.
+    static let tpmsEncodings: [(name: String, scale: Double, offset: Double)] = [
+        ("kPa/3", 0.145038 / 3, 0.145038 * 22 / 3),   // ((A*256+B)/3 + 22/3) kPa → psi
+        ("psi/20", 0.05, 0),
+        ("kPa", 0.145038, 0),
+        ("kPa/10", 0.0145038, 0),
+        ("psi/10", 0.1, 0),
+    ]
+
+    /// Turns the raw body-module values into psi without any setup: uses the learned calibration when there is one,
+    /// otherwise the first known encoding that gives believable truck pressures for every tyre that answered.
+    static func decodeTires(raw: [String: Int], calibration: TPMSCalibration) -> (tires: TireSet, method: String)? {
+        guard !raw.isEmpty else { return nil }
+        let believable: ClosedRange<Double> = 20...130   // inflated truck tyre
+        let shown: ClosedRange<Double> = 0...150
+        let needed = max(1, raw.count - 1)               // one flat tyre must not break the choice
+        var pick: (Double, Double, String)?
+        if calibration.confirmed {
+            pick = (calibration.scale, calibration.offset, "معايرة")
+        } else {
+            for e in tpmsEncodings {
+                let good = raw.values.filter { believable.contains(psi(raw: $0, scale: e.scale, offset: e.offset)) }.count
+                if good >= needed { pick = (e.scale, e.offset, e.name); break }
+            }
+        }
+        guard let (s, o, name) = pick else { return nil }
+        func v(_ k: String) -> Double? {
+            guard let r = raw[k] else { return nil }
+            let x = psi(raw: r, scale: s, offset: o)
+            return shown.contains(x) ? (x * 10).rounded() / 10 : nil
+        }
+        let t = TireSet(frontLeft: v("FL"), frontRight: v("FR"), rearLeft: v("RL"), rearRight: v("RR"))
+        return t.hasAny ? (t, name) : nil
+    }
+
+    /// The adapter refused an AT command outright ("?" / ERROR). Silence is not a refusal: this adapter
+    /// stays silent on several AT commands it still honours.
+    static func refused(_ reply: String) -> Bool {
+        let t = reply.uppercased()
+        return t.contains("?") || t.contains("ERROR")
+    }
 }
 
 /// Learned conversion for this truck's TPMS raw values (set once from the dash readout).

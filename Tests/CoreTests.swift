@@ -68,6 +68,43 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(TPMSCalibration.fit(raw: [1, 2], dash: [46, 46])?.confirmed, false)
     }
 
+    func testTiresDecodeWithoutCalibration() {
+        // Common Ford encoding ((A*256+B)/3 + 22/3) kPa: 930 ≈ 46 psi, 1200 ≈ 59 psi.
+        let a = OBDProtocol.decodeTires(raw: ["FL": 930, "FR": 930, "RL": 1200, "RR": 1118], calibration: TPMSCalibration())
+        XCTAssertEqual(a?.method, "kPa/3")
+        XCTAssertEqual(a?.tires.frontLeft ?? 0, 46, accuracy: 1)
+        XCTAssertEqual(a?.tires.rearLeft ?? 0, 59, accuracy: 1)
+        // Plain kPa values must not be read as the /3 encoding.
+        let b = OBDProtocol.decodeTires(raw: ["FL": 317, "FR": 317, "RL": 407, "RR": 379], calibration: TPMSCalibration())
+        XCTAssertEqual(b?.method, "kPa")
+        XCTAssertEqual(b?.tires.frontRight ?? 0, 46, accuracy: 1)
+        // One flat tyre still decodes and shows near zero.
+        let c = OBDProtocol.decodeTires(raw: ["FL": 930, "FR": 0, "RL": 1200, "RR": 1118], calibration: TPMSCalibration())
+        XCTAssertEqual(c?.method, "kPa/3")
+        XCTAssertEqual(c?.tires.frontRight ?? -1, 1.1, accuracy: 0.2)
+        // A learned calibration wins.
+        let cal = TPMSCalibration(scale: 0.1, offset: 0, confirmed: true)
+        XCTAssertEqual(OBDProtocol.decodeTires(raw: ["FL": 460], calibration: cal)?.tires.frontLeft, 46)
+        // Garbage gives nothing.
+        XCTAssertNil(OBDProtocol.decodeTires(raw: ["FL": 65535, "FR": 65535], calibration: TPMSCalibration()))
+        XCTAssertNil(OBDProtocol.decodeTires(raw: [:], calibration: TPMSCalibration()))
+    }
+
+    func testTireReplyInAdapterFormat() {
+        // This adapter prints a header line per ECU before the data.
+        let reply = "ECU:1  CMD:222813  CNT:1\r\n62 28 13 03 A2\r\n"
+        XCTAssertEqual(OBDProtocol.fordDIDRaw(did: "2813", reply: reply), 0x03A2)
+        XCTAssertNil(OBDProtocol.fordDIDRaw(did: "2813", reply: "CMD:222813 NULL\r\n"))
+    }
+
+    func testAdapterRefusalDetection() {
+        XCTAssertTrue(OBDProtocol.refused("?\r\n"))
+        XCTAssertTrue(OBDProtocol.refused("ERROR"))
+        XCTAssertFalse(OBDProtocol.refused("OK\r\n"))
+        XCTAssertFalse(OBDProtocol.refused(""))          // silence is not a refusal on this adapter
+        XCTAssertFalse(OBDProtocol.refused("BD$V14.5;R00600;S000;@1"))
+    }
+
     // MARK: Models
     func testLimits() {
         let l = Limits()

@@ -40,6 +40,9 @@ final class OBDLink: NSObject, ObservableObject {
     private var lastTickAt: Date?
     private var loopTask: Task<Void, Never>?
     private var scanRequested = false
+    private var tiresRequested = false
+    private var tiresOK = false
+    private var lastTiresAt = Date.distantPast
     private var paused = false
 
     init(store: VehicleStore = .shared, alerts: AlertCenter = .shared) {
@@ -66,6 +69,10 @@ final class OBDLink: NSObject, ObservableObject {
                             baroKPa: 81, railKPa: 26820, mafGs: 23.86, fuelRateLh: 1.25, fuelLevelPercent: 46.6, batteryV: 14.5,
                             ecuV: 14.44, runTimeS: 815, milOn: false, dtcCount: 0,
                             tires: TireSet(frontLeft: 46, frontRight: 46, rearLeft: 59, rearRight: 55), updatedAt: Date())
+        store.data.tpmsStatus = "آخر قراءة من السيارة (وحدة الهيكل)"
+        store.data.tpmsReadAt = Date()
+        store.data.tpmsDiag = ["ATSH726 → OK", "222813 → 62 28 13 03 A2", "222814 → 62 28 14 03 A2",
+                               "222815 → 62 28 15 04 5E", "222816 → 62 28 16 04 B0", "ATSH7DF → OK"]
         if store.lastScan == nil {
             var r = ScanReport()
             r.vin = "1FT7W2BT4KEE14369"; r.batteryV = 14.5; r.coolantC = 61; r.oilC = 60; r.railKPa = 26820; r.fuelPercent = 46.6
@@ -85,6 +92,12 @@ final class OBDLink: NSObject, ObservableObject {
     }
 
     // MARK: Public controls
+
+    /// Reads the tyre pressures now (from the tyres card).
+    func requestTires() {
+        tiresRequested = true
+        if status != .connected { store.data.tpmsStatus = "يقرأ الكفرات أول ما تتصل القطعة" }
+    }
 
     func requestScan() {
         scanRequested = true
@@ -184,7 +197,11 @@ final class OBDLink: NSObject, ObservableObject {
         var lastSlow = Date.distantPast
         var lastBattery = Date()
         while !Task.isCancelled && status == .connected {
-            if scanRequested { scanRequested = false; await runScan() }
+            if scanRequested { scanRequested = false; await runScan(); lastTiresAt = Date() }
+            if tiresRequested || (tiresOK && Date().timeIntervalSince(lastTiresAt) > 120) {
+                tiresRequested = false
+                await refreshTires()
+            }
             for pid in OBDProtocol.fastPIDs { await poll(pid) }
             if !streamActive { for pid in OBDProtocol.streamFallbackPIDs { await poll(pid) } }
             if Date().timeIntervalSince(lastSlow) > 15 {
@@ -241,7 +258,7 @@ final class OBDLink: NSObject, ObservableObject {
         await readBattery()
 
         step("ضغط الكفرات")
-        await readTires(into: &report)
+        tiresOK = await readTires(into: &report)
 
         step("كمبيوترات فورد")
         await readModules(into: &report)
@@ -270,6 +287,7 @@ final class OBDLink: NSObject, ObservableObject {
         var results: [ModuleResult] = []
         for m in FordModuleSpec.all {
             let hdr = await send("ATSH" + m.header, timeout: 1.2)
+            // Needs a clear OK: if the header were silently ignored, other ECUs' answers would be filed under this module.
             guard hdr.uppercased().contains("OK") else {
                 results.append(ModuleResult(key: m.key, responded: false, readable: false))
                 continue
@@ -284,7 +302,7 @@ final class OBDLink: NSObject, ObservableObject {
 
     /// Real odometer from the PCM and total engine/idle hours from PID 7F.
     private func readOdometer(into report: inout ScanReport) async {
-        if (await send("ATSH7E0", timeout: 1.2)).uppercased().contains("OK") {
+        if !OBDProtocol.refused(await send("ATSH7E0", timeout: 1.2)) {
             let odo = UDS.fordOdometerKm(await send("22DD01", timeout: 2))
             _ = await send("ATSH7DF", timeout: 1.2)
             if let odo, odo > 1000 {
@@ -312,23 +330,72 @@ final class OBDLink: NSObject, ObservableObject {
         return ff == FreezeFrame() ? nil : ff
     }
 
-    /// Asks the body module directly (read-only service 0x22), then puts the adapter back to normal addressing.
-    private func readTires(into report: inout ScanReport) async {
-        let hdr = await send("ATSH" + OBDProtocol.fordBCMHeader, timeout: 1.2)
-        guard hdr.uppercased().contains("OK") else { report.notes.append("القطعة ما تدعم توجيه الطلب لوحدة الكفرات"); return }
-        var raw: [String: Int] = [:]
-        for (did, pos) in OBDProtocol.fordTPMSDIDs {
-            if let v = OBDProtocol.fordDIDRaw(did: did, reply: await send("22" + did, timeout: 1.8)) { raw[pos] = v }
+    /// Asks the body module for the four tyre pressures (read-only service 0x22). Tries the body module directly
+    /// first, then a broadcast request, records every reply for the diagnostics sheet, and always restores
+    /// normal addressing afterwards.
+    @discardableResult
+    private func readTires(into report: inout ScanReport) async -> Bool {
+        var diag: [String] = []
+        func note(_ cmd: String, _ reply: String) {
+            let r = ProbeLogic.stripChatter(reply).replacingOccurrences(of: "\r", with: " ").replacingOccurrences(of: "\n", with: " ")
+                .trimmingCharacters(in: .whitespaces)
+            diag.append("\(cmd) → \(r.isEmpty ? "(لا رد)" : String(r.prefix(90)))")
         }
-        _ = await send("ATSH7DF", timeout: 1.2)
+        var raw: [String: Int] = [:]
+        var via = ""
+        // 1) Body module directly.
+        let hdr = await send("ATSH" + OBDProtocol.fordBCMHeader, timeout: 1.2)
+        note("ATSH" + OBDProtocol.fordBCMHeader, hdr)
+        if !OBDProtocol.refused(hdr) {
+            for (did, pos) in OBDProtocol.fordTPMSDIDs {
+                let reply = await send("22" + did, timeout: 1.8)
+                note("22" + did, reply)
+                if let v = OBDProtocol.fordDIDRaw(did: did, reply: reply) { raw[pos] = v }
+                if raw.isEmpty && did == OBDProtocol.fordTPMSDIDs[0].did && reply.uppercased().contains("NULL") { break }
+            }
+            if !raw.isEmpty { via = "وحدة الهيكل" }
+        }
+        let back = await send("ATSH7DF", timeout: 1.2)
+        note("ATSH7DF", back)
+        // 2) Broadcast request (some adapters only talk on the normal address).
+        if raw.isEmpty {
+            for (did, pos) in OBDProtocol.fordTPMSDIDs {
+                let reply = await send("22" + did, timeout: 1.8)
+                note("22" + did + " (عام)", reply)
+                if let v = OBDProtocol.fordDIDRaw(did: did, reply: reply) { raw[pos] = v }
+                if raw.isEmpty && did == OBDProtocol.fordTPMSDIDs[0].did && reply.uppercased().contains("NULL") { break }
+            }
+            if !raw.isEmpty { via = "طلب عام" }
+        }
+
+        store.data.tpmsDiag = diag
+        store.data.tpmsReadAt = Date()
+        add("TPMS raw=\(raw)")
+        guard !raw.isEmpty else {
+            let msg = OBDProtocol.refused(hdr) ? "القطعة رفضت توجيه الطلب لوحدة الكفرات" : "وحدة الكفرات ما ردت على القطعة"
+            store.data.tpmsStatus = msg
+            report.notes.append(msg)
+            report.tireSource = msg
+            return false
+        }
         store.data.lastTPMSRaw = raw
-        guard !raw.isEmpty else { report.notes.append("وحدة الكفرات ما ردت"); return }
-        let cal = store.data.tpms
-        guard cal.confirmed else { report.tireSource = "بانتظار المعايرة"; return }
-        func p(_ k: String) -> Double? { raw[k].map { OBDProtocol.psi(raw: $0, scale: cal.scale, offset: cal.offset) } }
-        report.tires = TireSet(frontLeft: p("FL"), frontRight: p("FR"), rearLeft: p("RL"), rearRight: p("RR"))
+        guard let decoded = OBDProtocol.decodeTires(raw: raw, calibration: store.data.tpms) else {
+            store.data.tpmsStatus = "وصلت قراءة من وحدة الكفرات بصيغة غير معروفة — تحتاج معايرة مرة وحدة"
+            report.tireSource = "بانتظار المعايرة"
+            return false
+        }
+        report.tires = decoded.tires
         report.tireSource = "من السيارة"
-        readings.tires = report.tires
+        readings.tires = decoded.tires
+        store.data.tpmsStatus = "آخر قراءة من السيارة (\(via))"
+        return true
+    }
+
+    /// Reads the tyres on their own (button on the tyres card, and every couple of minutes once it has worked).
+    private func refreshTires() async {
+        var scratch = ScanReport()
+        tiresOK = await readTires(into: &scratch)
+        lastTiresAt = Date()
     }
 
     // MARK: Per-second bookkeeping

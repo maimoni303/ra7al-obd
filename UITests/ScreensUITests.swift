@@ -45,6 +45,17 @@ final class ScreensUITests: XCTestCase {
         shot("09-oil-confirm")
         confirm.tap()
 
+        app.swipeUp()
+        XCTAssertTrue(app.buttons["read-tires"].waitForExistence(timeout: 5))
+        tap("read-tires")
+        shot("09a-tires-card")
+        tap("tires-details")
+        XCTAssertTrue(app.navigationBars["تفاصيل قراءة الكفرات"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["ATSH726 → OK"].waitForExistence(timeout: 5))
+        shot("09b-tires-details")
+        tap("إغلاق")
+        XCTAssertTrue(app.buttons["tab-home"].waitForExistence(timeout: 5))
+
         tap("settings");       shot("10-settings")
         app.swipeUp();          shot("11-settings-more")
         app.swipeUp();          shot("12-settings-end")
