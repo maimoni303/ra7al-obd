@@ -343,30 +343,43 @@ final class OBDLink: NSObject, ObservableObject {
         }
         var raw: [String: Int] = [:]
         var via = ""
-        // 1) Body module directly.
-        let hdr = await send("ATSH" + OBDProtocol.fordBCMHeader, timeout: 1.2)
-        note("ATSH" + OBDProtocol.fordBCMHeader, hdr)
-        if !OBDProtocol.refused(hdr) {
-            for (did, pos) in OBDProtocol.fordTPMSDIDs {
-                let reply = await send("22" + did, timeout: 1.8)
-                note("22" + did, reply)
-                if let v = OBDProtocol.fordDIDRaw(did: did, reply: reply) { raw[pos] = v }
-                if raw.isEmpty && did == OBDProtocol.fordTPMSDIDs[0].did && reply.uppercased().contains("NULL") { break }
+        let firstDID = OBDProtocol.fordTPMSDIDs[0].did
+        let formats = OBDProtocol.didRequestFormats.indices
+            .sorted { ($0 == (store.data.tpmsFormat ?? -1) ? 0 : 1, $0) < ($1 == (store.data.tpmsFormat ?? -1) ? 0 : 1, $1) }
+
+        /// Finds a request format the truck accepts, then reads all four tyres with it.
+        func readAll(_ label: String) async -> Bool {
+            for i in formats {
+                let f = OBDProtocol.didRequestFormats[i]
+                let reply = await send(f.make(firstDID), timeout: 1.8)
+                let nrc = OBDProtocol.negativeCodes(service: 0x22, in: reply)
+                note(f.make(firstDID) + label, reply + (nrc.isEmpty ? "" : "  ← " + nrc.map(OBDProtocol.negativeText).joined(separator: "، ")))
+                guard let v = OBDProtocol.fordDIDRaw(did: firstDID, reply: reply) else { continue }
+                raw[OBDProtocol.fordTPMSDIDs[0].position] = v
+                store.data.tpmsFormat = i
+                for (did, pos) in OBDProtocol.fordTPMSDIDs.dropFirst() {
+                    let r = await send(f.make(did), timeout: 1.8)
+                    note(f.make(did) + label, r)
+                    if let x = OBDProtocol.fordDIDRaw(did: did, reply: r) { raw[pos] = x }
+                }
+                return true
             }
-            if !raw.isEmpty { via = "وحدة الهيكل" }
+            return false
         }
+
+        // 1) Body module directly (header spelled the ways different firmwares accept).
+        var headerAccepted = false
+        for h in ["ATSH726", "ATSH 726", "AT SH 726"] {
+            let r = await send(h, timeout: 1.2)
+            note(h, r)
+            if r.uppercased().contains("OK") { headerAccepted = true; break }
+        }
+        let hdr = headerAccepted ? "OK" : ""
+        if await readAll("") { via = headerAccepted ? "وحدة الهيكل" : "طلب عام" }
         let back = await send("ATSH7DF", timeout: 1.2)
         note("ATSH7DF", back)
-        // 2) Broadcast request (some adapters only talk on the normal address).
-        if raw.isEmpty {
-            for (did, pos) in OBDProtocol.fordTPMSDIDs {
-                let reply = await send("22" + did, timeout: 1.8)
-                note("22" + did + " (عام)", reply)
-                if let v = OBDProtocol.fordDIDRaw(did: did, reply: reply) { raw[pos] = v }
-                if raw.isEmpty && did == OBDProtocol.fordTPMSDIDs[0].did && reply.uppercased().contains("NULL") { break }
-            }
-            if !raw.isEmpty { via = "طلب عام" }
-        }
+        // 2) Broadcast, only if the header really changed something above.
+        if raw.isEmpty && headerAccepted, await readAll(" (عام)") { via = "طلب عام" }
 
         store.data.tpmsDiag = diag
         store.data.tpmsReadAt = Date()

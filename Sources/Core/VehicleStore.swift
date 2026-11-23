@@ -28,6 +28,7 @@ struct AppData: Codable, Equatable {
     var tpmsStatus: String?
     var tpmsDiag: [String]?
     var tpmsReadAt: Date?
+    var tpmsFormat: Int?
     var dashcamHost: String?
     var speakAlerts = true
     var autoScanOnConnect = true

@@ -97,6 +97,17 @@ final class CoreTests: XCTestCase {
         XCTAssertNil(OBDProtocol.fordDIDRaw(did: "2813", reply: "CMD:222813 NULL\r\n"))
     }
 
+    func testDIDRequestFormatsAndRefusals() {
+        let f = OBDProtocol.didRequestFormats.map { $0.make("2813") }
+        XCTAssertEqual(f, ["222813", "22 28 13", "03222813", "22281300", "2228130000"])
+        // Real reply from the F-250 through the ZUS adapter: two ECUs said "wrong length".
+        let reply = "7F 22 13\r\n7F 22 13\r\n"
+        XCTAssertEqual(OBDProtocol.negativeCodes(service: 0x22, in: reply), [0x13, 0x13])
+        XCTAssertNil(OBDProtocol.fordDIDRaw(did: "2813", reply: reply))
+        XCTAssertEqual(OBDProtocol.negativeText(0x13), "طول الطلب غير مقبول")
+        XCTAssertEqual(OBDProtocol.negativeCodes(service: 0x22, in: "62 28 13 03 A2"), [])
+    }
+
     func testAdapterRefusalDetection() {
         XCTAssertTrue(OBDProtocol.refused("?\r\n"))
         XCTAssertTrue(OBDProtocol.refused("ERROR"))

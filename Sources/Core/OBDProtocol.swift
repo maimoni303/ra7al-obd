@@ -179,6 +179,35 @@ enum OBDProtocol {
         return t.hasAny ? (t, name) : nil
     }
 
+    /// Ways to write a read-by-identifier request. Some adapter firmwares assume a one-byte PID after the
+    /// service and cut the second DID byte, which the truck answers with 7F 22 13 (wrong length).
+    static let didRequestFormats: [(name: String, make: (String) -> String)] = [
+        ("22XXXX", { "22" + $0 }),
+        ("22 XX XX", { "22 " + $0.prefix(2) + " " + $0.suffix(2) }),
+        ("03 22XXXX", { "0322" + $0 }),
+        ("22XXXX00", { "22" + $0 + "00" }),
+        ("22XXXX0000", { "22" + $0 + "0000" }),
+    ]
+
+    /// Negative-response codes for a service in a reply (`7F <service> <code>`), one per answering ECU.
+    static func negativeCodes(service: UInt8, in reply: String) -> [UInt8] {
+        ProbeLogic.dataLines(reply).compactMap { l in
+            guard let k = (0..<max(0, l.count - 2)).first(where: { l[$0] == 0x7F && l[$0 + 1] == service }) else { return nil }
+            return l[k + 2]
+        }
+    }
+
+    static func negativeText(_ code: UInt8) -> String {
+        switch code {
+        case 0x11: return "الخدمة غير مدعومة"
+        case 0x12, 0x31: return "الرقم غير موجود في هذا الكمبيوتر"
+        case 0x13: return "طول الطلب غير مقبول"
+        case 0x22: return "الشروط غير مناسبة الحين"
+        case 0x33: return "يحتاج صلاحية"
+        default: return String(format: "رفض 0x%02X", code)
+        }
+    }
+
     /// The adapter refused an AT command outright ("?" / ERROR). Silence is not a refusal: this adapter
     /// stays silent on several AT commands it still honours.
     static func refused(_ reply: String) -> Bool {
